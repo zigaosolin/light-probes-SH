@@ -1,14 +1,11 @@
-use spherical_harmonics::project_fn;
+mod spherical_harmonics;
 
+use spherical_harmonics::Direction;
+use spherical_harmonics::spherical_harmonics_order3;
 
-fn sample_fun(theta: f32, phi: f32) -> f32 {
-	theta.cos() * (phi*2.0).cos()
-}
 
 fn main() {
-	let mut rng = rand::thread_rng();
-	let result = project_fn(3, 100000, &mut rng, sample_fun);
-
-
-    println!("Result is {:?}", result);
+	let direction = Direction::new(0f32, 1f32, 0f32);
+	let sh = spherical_harmonics_order3(direction);
+    println!("Result is {:?}", sh);
 }
