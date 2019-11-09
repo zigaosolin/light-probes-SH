@@ -128,6 +128,12 @@ mod tests {
 	use super::*;
 
 	#[test]
+	#[should_panic]
+	fn direction_initialize_non_normalized() {
+		let _direction = Direction::new(2f32, 0f32, 1f32);
+	}
+
+	#[test]
 	fn direction_sampling() {
 		let mut rng = rand::thread_rng();
 
@@ -135,22 +141,24 @@ mod tests {
 		let mut sum_y = 0f32;
 		let mut sum_z = 0f32;
 
-		let count = 10000;
+		let count = 20000;
 
 		for _i in 0..count {
-			let direction = Direction::generate_random_on_sphere(&mut rng);
-			sum_x += direction.x;
-			sum_y += direction.y;
-			sum_z += direction.z;
+			let d = Direction::generate_random_on_sphere(&mut rng);
+			assert!( (d.x*d.x + d.y*d.y + d.z*d.z - 1f32).abs() < 1e-5f32, "Direction is not normalized");
+
+			sum_x += d.x;
+			sum_y += d.y;
+			sum_z += d.z;
 		}
 
 		sum_x /= count as f32;
 		sum_y /= count as f32;
 		sum_z /= count as f32;
 
-		assert!(sum_x.abs() < 1e-2, "Distribution not equal in x, {0}", sum_x);
-		assert!(sum_y.abs() < 1e-2, "Distribution not equal in y, {0}", sum_y);
-		assert!(sum_z.abs() < 1e-2, "Distribution not equal in z, {0}", sum_z);
+		assert!(sum_x.abs() < 0.05, "Distribution not equal in x, {0}", sum_x);
+		assert!(sum_y.abs() < 0.05, "Distribution not equal in y, {0}", sum_y);
+		assert!(sum_z.abs() < 0.05, "Distribution not equal in z, {0}", sum_z);
 	}
 
 	#[test]
@@ -164,6 +172,68 @@ mod tests {
 			assert!(sh.coefficients[i].abs() < 0.01, "All but first coefficient should converge to zero, got {0}", sh.coefficients[i]);
 		}
 	}
+
+	#[test]
+	fn convolution_sh_constant() {
+		let mut rng = rand::thread_rng();
+		let sh = SHFuncApproximation::from_function(|_x,_y,_z| 1f32, &mut rng, 10000);
+		
+		// Convoluting constant function with constant is the same
+		print!("Approximation is {:?}", sh);
+		let result = sh.convolution(&sh);
+
+		// Expected error is small as we can do a really perfect approximation of constant function
+		// Integrations differ by 4 PI (real-space is 4 PI, SH are normalized so it is 1)
+		let expected = 1f32 / (4f32 * 3.141f32);
+		assert!( (result - expected).abs() < 0.001, "Result is {0}, expected {1}", result, expected);
+	}
+
+
+	fn integrate_real_space<F, R>(func: F, mut rand: &mut R, count: u32) -> f32 
+		where F: Fn(f32, f32, f32) -> f32, R: Rng {
+
+		let mut sum = 0f32;
+		for _i in 0..count {
+			let direction = Direction::generate_random_on_sphere(&mut rand);
+
+			sum += func(direction.x, direction.y, direction.z);
+		}
+
+		sum / (count as f32)
+	}
+
+	#[test]
+	fn convolution_sh_nontrivial_odd() {
+		let mut rng = rand::thread_rng();
+		let func = |x:f32,_y:f32,_z:f32|  x;
+
+		let sh = SHFuncApproximation::from_function(func, &mut rng, 10000);
+		
+		// Convoluting constant function with constant is the same
+		let result = sh.convolution(&sh);
+
+		let normalized = integrate_real_space(|x,y,z| { let value = func(x,y,z); value*value }, &mut rng, 10000);
+
+		let expected = normalized / (4f32 * 3.141f32);
+		assert!( (result - expected).abs() < 0.01, "Result is {0}, expected {1}", result, expected);
+	}
+
+		#[test]
+	fn convolution_sh_nontrivial() {
+		let mut rng = rand::thread_rng();
+		let func = |x:f32,y:f32,z:f32| x*x + y*z;
+
+		let sh = SHFuncApproximation::from_function(func, &mut rng, 10000);
+		
+		// Convoluting constant function with constant is the same
+		let result = sh.convolution(&sh);
+
+		// We compute convolution in real space
+		let normalized = integrate_real_space(|x,y,z| { let value = func(x,y,z); value*value }, &mut rng, 10000);
+		let expected = normalized / (4f32 * 3.141f32);
+		assert!( (result - expected).abs() < 0.01, "Result is {0}, expected {1}", result, expected);
+	}
+
 }
 
 
