@@ -1,7 +1,7 @@
 use rand::Rng;
+use std::f32::consts::PI;
 
-// A direction, represented as floats. The constraint it keeps is
-// that the length is always 1
+// A direction, represented as floats. Invariant is length == 1
 #[derive(Debug, Copy, Clone)]
 pub struct Direction {
 	x: f32,
@@ -36,8 +36,9 @@ impl Direction {
 	}
 }
 
-// Spherical harmonic coefficients. Represents coefficients only for
-// one channel. You can represent any function on sphere as this structure
+// Spherical harmonic coefficients. You can represent any function
+// on sphere using these structure (to certain degree). Smooth
+// functions of angle are represented better
 #[derive(Debug, Clone)]
 pub struct SHFuncApproximation {
 	coefficients : Vec<f32> 
@@ -48,24 +49,31 @@ impl SHFuncApproximation {
 		SHFuncApproximation { coefficients: vec![0f32; 9]}
 	}
 
+	// Multiplies with self, and stores value in self (to avoid allocations)
 	pub fn mul_in_place(&mut self, scalar : f32) {
 		for i in 0..9 {
 			self.coefficients[i] *= scalar;
 		}
 	}
 
+	// Adds other coefficients to self
 	pub fn add_in_place(&mut self, other: &SHFuncApproximation) {
 		for i in 0..9 {
 			self.coefficients[i] += other.coefficients[i];
 		}
 	}
 
+	// Computes the integral, matches the real-case integral as closely as it can
 	pub fn convolution(&self, other : &SHFuncApproximation) -> f32 {
 		let mut result = 0f32;
 		for i in 0..9 {
 			result += self.coefficients[i] * other.coefficients[i];
 		}
-		result
+
+		// In SH space, normalization is 1, in realspace, normalization
+		// is 4 PI (this is the result of integrating over sphere). We match
+		// realspace here
+		16f32 * PI * PI * result
 	}
 
 
@@ -164,30 +172,15 @@ mod tests {
 	#[test]
 	fn uniform_distribution_sh() {
 		let mut rng = rand::thread_rng();
+		let func = |_x,_y,_z| 1f32;
 
-		let sh = SHFuncApproximation::from_function(|_x,_y,_z| 1f32, &mut rng, 10000);
+		let sh = SHFuncApproximation::from_function(func, &mut rng, 10000);
 		
 		println!("{:?}", sh);
 		for i in 1..9 {
 			assert!(sh.coefficients[i].abs() < 0.01, "All but first coefficient should converge to zero, got {0}", sh.coefficients[i]);
 		}
 	}
-
-	#[test]
-	fn convolution_sh_constant() {
-		let mut rng = rand::thread_rng();
-		let sh = SHFuncApproximation::from_function(|_x,_y,_z| 1f32, &mut rng, 10000);
-		
-		// Convoluting constant function with constant is the same
-		print!("Approximation is {:?}", sh);
-		let result = sh.convolution(&sh);
-
-		// Expected error is small as we can do a really perfect approximation of constant function
-		// Integrations differ by 4 PI (real-space is 4 PI, SH are normalized so it is 1)
-		let expected = 1f32 / (4f32 * 3.141f32);
-		assert!( (result - expected).abs() < 0.001, "Result is {0}, expected {1}", result, expected);
-	}
-
 
 	fn integrate_real_space<F, R>(func: F, mut rand: &mut R, count: u32) -> f32 
 		where F: Fn(f32, f32, f32) -> f32, R: Rng {
@@ -199,7 +192,25 @@ mod tests {
 			sum += func(direction.x, direction.y, direction.z);
 		}
 
-		sum / (count as f32)
+		4f32 * PI * sum / (count as f32)
+	}
+
+	#[test]
+	fn convolution_sh_constant() {
+		let mut rng = rand::thread_rng();
+		let func = |_x,_y,_z| 1f32;
+		let sh = SHFuncApproximation::from_function(func, &mut rng, 10000);
+		
+		// Convoluting constant function with constant is the same
+		
+		let result = sh.convolution(&sh);
+
+		let normalized = integrate_real_space(|x,y,z| { let value = func(x,y,z); value*value }, &mut rng, 10000);
+		assert!( (normalized - 4f32 * PI).abs() < 0.0001, "We expect the real space integration to yield 4PI for constant");
+
+		// Expected error is small as we can do a really perfect approximation of constant function
+		let expected = normalized;
+		assert!( (result - expected).abs() < 0.3, "Result is {0}, expected {1}", result, expected);
 	}
 
 	#[test]
@@ -214,8 +225,8 @@ mod tests {
 
 		let normalized = integrate_real_space(|x,y,z| { let value = func(x,y,z); value*value }, &mut rng, 10000);
 
-		let expected = normalized / (4f32 * 3.141f32);
-		assert!( (result - expected).abs() < 0.01, "Result is {0}, expected {1}", result, expected);
+		let expected = normalized;
+		assert!( (result - expected).abs() < 0.3, "Result is {0}, expected {1}", result, expected);
 	}
 
 		#[test]
@@ -230,8 +241,8 @@ mod tests {
 
 		// We compute convolution in real space
 		let normalized = integrate_real_space(|x,y,z| { let value = func(x,y,z); value*value }, &mut rng, 10000);
-		let expected = normalized / (4f32 * 3.141f32);
-		assert!( (result - expected).abs() < 0.01, "Result is {0}, expected {1}", result, expected);
+		let expected = normalized;
+		assert!( (result - expected).abs() < 0.3, "Result is {0}, expected {1}", result, expected);
 	}
 
 }
