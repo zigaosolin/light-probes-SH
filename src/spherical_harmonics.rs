@@ -116,15 +116,54 @@ impl SHFuncApproximation {
 			approximation.add_in_place(&temporary);
 		}
 
-
+		// Normalize by the amount of samples
+		approximation.mul_in_place(1f32 / (count as f32));
 		approximation
 	}
 
 }
 
-#[cfg(tests)]
+#[cfg(test)]
 mod tests {
+	use super::*;
 
+	#[test]
+	fn direction_sampling() {
+		let mut rng = rand::thread_rng();
+
+		let mut sum_x = 0f32;
+		let mut sum_y = 0f32;
+		let mut sum_z = 0f32;
+
+		let count = 10000;
+
+		for _i in 0..count {
+			let direction = Direction::generate_random_on_sphere(&mut rng);
+			sum_x += direction.x;
+			sum_y += direction.y;
+			sum_z += direction.z;
+		}
+
+		sum_x /= count as f32;
+		sum_y /= count as f32;
+		sum_z /= count as f32;
+
+		assert!(sum_x.abs() < 1e-2, "Distribution not equal in x, {0}", sum_x);
+		assert!(sum_y.abs() < 1e-2, "Distribution not equal in y, {0}", sum_y);
+		assert!(sum_z.abs() < 1e-2, "Distribution not equal in z, {0}", sum_z);
+	}
+
+	#[test]
+	fn uniform_distribution_sh() {
+		let mut rng = rand::thread_rng();
+
+		let sh = SHFuncApproximation::from_function(|_x,_y,_z| 1f32, &mut rng, 10000);
+		
+		println!("{:?}", sh);
+		for i in 1..9 {
+			assert!(sh.coefficients[i].abs() < 0.01, "All but first coefficient should converge to zero, got {0}", sh.coefficients[i]);
+		}
+	}
 }
 
 
