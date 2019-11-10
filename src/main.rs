@@ -1,6 +1,8 @@
 mod spherical_harmonics;
+mod spherical_integration;
+mod spherical;
 
-use spherical_harmonics::Direction;
+use spherical::Direction;
 use spherical_harmonics::SHFuncApproximation;
 
 fn main() {

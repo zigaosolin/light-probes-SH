@@ -1,40 +1,7 @@
 use rand::Rng;
 use std::f32::consts::PI;
+use crate::spherical::Direction;
 
-// A direction, represented as floats. Invariant is length == 1
-#[derive(Debug, Copy, Clone)]
-pub struct Direction {
-	x: f32,
-	y: f32,
-	z: f32
-}
-
-impl Direction {
-	pub fn new(x: f32, y: f32, z: f32) -> Direction {
-		assert!( (x*x + y*y + z*z - 1f32).abs() < 1e-5f32, "Direction is not normalized");
-		Direction {x: x, y: y, z: z }
-	}
-
-	// We use rejection method for generation. Generate in cube, and retry
-	// if we get the point outside the sphere
-	fn generate_random_on_sphere<R>(rng : &mut R) -> Direction
-		where R : Rng {
-
-		loop {
-			let x = rng.gen::<f32>() * 2f32 - 1f32;
-			let y = rng.gen::<f32>() * 2f32 - 1f32;
-			let z = rng.gen::<f32>() * 2f32 - 1f32;
-
-			let r2 = x*x + y*y + z*z;
-			if r2 > 1f32 {
-				continue;
-			}
-
-			let r = r2.sqrt();
-			return Direction {x: x/r, y: y/r, z: z/r};
-		}
-	}
-}
 
 // Spherical harmonic coefficients. You can represent any function
 // on sphere using these structure (to certain degree). Smooth
@@ -87,7 +54,7 @@ impl SHFuncApproximation {
 
 	// Really fast spherical harmonics order 3 evaluation from
 	// this paper: https://www.ppsloan.org/publications/SHJCGT.pdf
-	// This is auto-generated code for first 9 SH functions
+	// This is auto-generated code for approximate single direction with first 9 SH functions
 	// We overwrite the value passed by reference so we don't do allocations
 	pub fn from_direction(&mut self, direction: Direction) {
 		let sh = &mut self.coefficients;
@@ -115,6 +82,8 @@ impl SHFuncApproximation {
 		sh[4] = f_tmp_c * f_s1;
 	}
 
+	// Approximate function with SH using Monte Carlo sampling. We use
+	// count samples, increase this value to make the approximation better
 	pub fn from_function<F, R>(func: F, mut rng: &mut R, count: u32) -> SHFuncApproximation
 		where F : Fn(f32, f32, f32) -> f32, R : Rng {
 
@@ -142,40 +111,7 @@ impl SHFuncApproximation {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	#[should_panic]
-	fn direction_initialize_non_normalized() {
-		let _direction = Direction::new(2f32, 0f32, 1f32);
-	}
-
-	#[test]
-	fn direction_sampling() {
-		let mut rng = rand::thread_rng();
-
-		let mut sum_x = 0f32;
-		let mut sum_y = 0f32;
-		let mut sum_z = 0f32;
-
-		let count = 20000;
-
-		for _i in 0..count {
-			let d = Direction::generate_random_on_sphere(&mut rng);
-			assert!( (d.x*d.x + d.y*d.y + d.z*d.z - 1f32).abs() < 1e-5f32, "Direction is not normalized");
-
-			sum_x += d.x;
-			sum_y += d.y;
-			sum_z += d.z;
-		}
-
-		sum_x /= count as f32;
-		sum_y /= count as f32;
-		sum_z /= count as f32;
-
-		assert!(sum_x.abs() < 0.05, "Distribution not equal in x, {0}", sum_x);
-		assert!(sum_y.abs() < 0.05, "Distribution not equal in y, {0}", sum_y);
-		assert!(sum_z.abs() < 0.05, "Distribution not equal in z, {0}", sum_z);
-	}
+	use crate::spherical_integration::integrate_real_space;
 
 	#[test]
 	fn uniform_distribution_sh() {
@@ -185,22 +121,10 @@ mod tests {
 		let sh = SHFuncApproximation::from_function(func, &mut rng, 10000);
 		
 		println!("{:?}", sh);
-		for i in 1..9 {
-			assert!(sh.coefficients[i].abs() < 0.01, "All but first coefficient should converge to zero, got {0}", sh.coefficients[i]);
+		for coef in sh.coefficients.iter().skip(1) {
+			assert!(coef.abs() < 0.01, "All but first coefficient should converge to zero \
+				because the distribution is constant, got {0}", coef);
 		}
-	}
-
-	fn integrate_real_space<F, R>(func: F, mut rand: &mut R, count: u32) -> f32 
-		where F: Fn(f32, f32, f32) -> f32, R: Rng {
-
-		let mut sum = 0f32;
-		for _i in 0..count {
-			let direction = Direction::generate_random_on_sphere(&mut rand);
-
-			sum += func(direction.x, direction.y, direction.z);
-		}
-
-		4f32 * PI * sum / (count as f32)
 	}
 
 	#[test]
