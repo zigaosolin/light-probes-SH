@@ -63,7 +63,15 @@ impl SHFuncApproximation {
 		}
 	}
 
-	// Computes the integral, matches the real-case integral as closely as it can
+	// Evaluates the SH in certain direction. We use convolution
+	// to evalute integral with delta function, as it is faster to do like this
+	pub fn eval(&self, direction: Direction, workspace: &mut SHFuncApproximation) -> f32 {
+		workspace.from_direction(direction);
+		self.convolution(workspace) / (4f32 * PI)
+	}
+
+	// Computes the integral of multiply of two SH representations,
+	// matches the real-case integral as closely as it can
 	pub fn convolution(&self, other : &SHFuncApproximation) -> f32 {
 		let mut result = 0f32;
 		for i in 0..9 {
@@ -229,7 +237,7 @@ mod tests {
 		assert!( (result - expected).abs() < 0.3, "Result is {0}, expected {1}", result, expected);
 	}
 
-		#[test]
+	#[test]
 	fn convolution_sh_nontrivial() {
 		let mut rng = rand::thread_rng();
 		let func = |x:f32,y:f32,z:f32| x*x + y*z;
@@ -243,6 +251,21 @@ mod tests {
 		let normalized = integrate_real_space(|x,y,z| { let value = func(x,y,z); value*value }, &mut rng, 10000);
 		let expected = normalized;
 		assert!( (result - expected).abs() < 0.3, "Result is {0}, expected {1}", result, expected);
+	}
+
+	#[test]
+	fn eval_trivial() {
+		let mut rng = rand::thread_rng();
+		let func = |x:f32,_y:f32,_z:f32| x*x;
+
+		let sh = SHFuncApproximation::from_function(func, &mut rng, 10000);
+		let mut workspace = SHFuncApproximation::new();
+
+		// Convoluting constant function with constant is the same
+		let result = sh.eval(Direction::new(1f32,0f32,0f32), &mut workspace);
+
+		let expected = 1f32;
+		assert!( (result - expected).abs() < 0.1, "Result is {0}, expected {1}", result, expected);
 	}
 
 }
