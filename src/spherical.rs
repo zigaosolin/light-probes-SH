@@ -33,6 +33,25 @@ impl Direction {
 			return Direction {x: x/r, y: y/r, z: z/r};
 		}
 	}
+
+	pub fn dot(&self, other: &Direction) -> f32 {
+		self.x*other.x + self.y*other.y + self.z*other.z
+	}
+
+	// We use rejection method for generation. Generate in cube, and retry
+	// if we get the point outside the sphere
+	pub fn generate_random_on_hemisphere<R>(normal: &Direction, mut rng : &mut R) -> Direction
+		where R : Rng {
+
+		loop {
+			let direction = Direction::generate_random_on_sphere(&mut rng);
+			if direction.dot(normal) < 0f32 {
+				continue;
+			}
+
+			return direction;
+		}
+	}
 }
 
 #[cfg(test)]

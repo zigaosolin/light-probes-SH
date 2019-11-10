@@ -56,6 +56,7 @@ impl SHFuncApproximation {
 	// this paper: https://www.ppsloan.org/publications/SHJCGT.pdf
 	// This is auto-generated code for approximate single direction with first 9 SH functions
 	// We overwrite the value passed by reference so we don't do allocations
+	// This code can also be used on GPU for fast direction -> SH coefficients creation
 	pub fn from_direction(&mut self, direction: Direction) {
 		let sh = &mut self.coefficients;
 
@@ -133,8 +134,7 @@ mod tests {
 		let func = |_x,_y,_z| 1f32;
 		let sh = SHFuncApproximation::from_function(func, &mut rng, 10000);
 		
-		// Convoluting constant function with constant is the same
-		
+		// Convoluting constant function with constant is the same	
 		let result = sh.convolution(&sh);
 
 		let normalized = integrate_real_space(|x,y,z| { let value = func(x,y,z); value*value }, &mut rng, 10000);
